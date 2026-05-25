@@ -1,0 +1,21 @@
+# Entornos Virtuales
+venv/
+env/
+.env
+
+# Archivos de caché de Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Base de datos local (NO subir a producción)
+nayoli.db
+*.sqlite3
+
+# Archivos subidos por los usuarios locales
+static/uploads/*
+!static/uploads/.gitkeep
+
+# Archivos temporales del sistema
+.DS_Store
+Thumbs.db

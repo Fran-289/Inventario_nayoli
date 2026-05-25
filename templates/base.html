@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nayoli Inventario</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+</head>
+<body class="{% if session.get('theme') == 'light' %}light-theme{% endif %}">
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="nav-left">
+            {% if session.get('user_id') %}
+            <i class="ph ph-list menu-toggle" onclick="toggleMobileMenu()"></i>
+            {% endif %}
+            <div class="nav-brand" onclick="window.location.href='{{ url_for('dashboard') }}'">
+                <i class="ph ph-hexagon-fill" style="font-size: 1.8rem;"></i> Nayoli
+            </div>
+        </div>
+        
+        {% if session.get('user_id') %}
+        <ul class="nav-links" id="navLinks">
+            <li><a href="{{ url_for('dashboard') }}"><i class="ph ph-squares-four"></i> Dashboard</a></li>
+            <li><a href="{{ url_for('products') }}"><i class="ph ph-package"></i> Inventario</a></li>
+            <li><a href="{{ url_for('movements') }}"><i class="ph ph-arrows-left-right"></i> Movimientos</a></li>
+            <li><a href="{{ url_for('providers') }}"><i class="ph ph-truck"></i> Proveedores</a></li>
+            <li><a href="{{ url_for('clients') }}"><i class="ph ph-users"></i> Clientes</a></li>
+            {% if session.get('role') == 'admin' %}
+            <li><a href="{{ url_for('audit') }}"><i class="ph ph-shield-check"></i> Auditoría</a></li>
+            {% endif %}
+        </ul>
+
+        <div class="nav-right">
+            <div class="profile-menu">
+                <div class="profile-trigger" onclick="toggleDropdown()">
+                    <div class="avatar-circle">
+                        {% if session.get('avatar') %}
+                            <img src="{{ url_for('static', filename='uploads/' + session.get('avatar')) }}" alt="Avatar">
+                        {% else %}
+                            {{ session.get('username', 'U')[:2].upper() }}
+                        {% endif %}
+                    </div>
+                    <div class="profile-info">
+                        <span class="profile-name">{{ session.get('username', '')|capitalize }}</span>
+                        <span class="profile-role">{% if session.get('role') == 'admin' %}Administrador{% else %}Vendedor{% endif %}</span>
+                    </div>
+                    <i class="ph ph-caret-down"></i>
+                </div>
+                
+                <div class="dropdown-content" id="profileDropdown">
+                    <a onclick="openModal('avatarModal')"><i class="ph ph-image"></i> Cambiar Foto</a>
+                    <a href="{{ url_for('toggle_theme') }}"><i class="ph ph-moon"></i> Cambiar a {% if session.get('theme') == 'dark' %}Modo Claro{% else %}Modo Oscuro{% endif %}</a>
+                    <a onclick="openModal('dashboardImageModal')"><i class="ph ph-desktop"></i> Cambiar Imagen Dashboard</a>
+                    <a onclick="openModal('infoModal')"><i class="ph ph-info"></i> Información del Sistema</a>
+                    <a href="{{ url_for('logout') }}" style="color: var(--danger);"><i class="ph ph-sign-out"></i> Cerrar Sesión</a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </nav>
+
+    <!-- Modal Cambiar Foto -->
+    <div class="modal" id="avatarModal">
+        <div class="modal-content" style="max-width: 400px; text-align: center;">
+            <span class="close-modal" onclick="closeModal('avatarModal')">&times;</span>
+            <h2><i class="ph ph-user-circle"></i> Cambiar Foto</h2>
+            <form method="POST" action="{{ url_for('upload_avatar') }}" enctype="multipart/form-data">
+                <div class="form-group" style="margin-top: 1rem;">
+                    <input type="file" name="avatar" class="form-control" accept="image/*" required>
+                </div>
+                <button type="submit" class="btn btn-primary"><i class="ph ph-upload-simple"></i> Subir Foto</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Cambiar Dashboard -->
+    <div class="modal" id="dashboardImageModal">
+        <div class="modal-content" style="max-width: 400px; text-align: center;">
+            <span class="close-modal" onclick="closeModal('dashboardImageModal')">&times;</span>
+            <h2><i class="ph ph-desktop"></i> Cambiar Imagen de Dashboard</h2>
+            <form method="POST" action="{{ url_for('upload_dashboard_image') }}" enctype="multipart/form-data">
+                <div class="form-group" style="margin-top: 1rem;">
+                    <input type="file" name="dashboard_img" class="form-control" accept="image/*" required>
+                </div>
+                <button type="submit" class="btn btn-primary"><i class="ph ph-upload-simple"></i> Subir Imagen</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Info -->
+    <div class="modal" id="infoModal">
+        <div class="modal-content" style="max-width: 400px; text-align: center;">
+            <span class="close-modal" onclick="closeModal('infoModal')">&times;</span>
+            <h2><i class="ph ph-info"></i> Información del Sistema</h2>
+            <p style="margin-top: 1rem; line-height: 1.5; color: var(--text-color);">
+                <strong>Sistema de Inventario Nayoli</strong><br>
+                Versión 2.0 (Premium UI)<br><br>
+                Módulos Activos:<br>
+                - Inventario Inteligente<br>
+                - Registro de Movimientos<br>
+                - Directorio de Clientes y Proveedores<br>
+                - Auditoría Inmutable
+            </p>
+        </div>
+    </div>
+
+    <!-- Flashes -->
+    <div class="flash-container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash flash-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>
+
+    <!-- Contenido -->
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+
+    <script>
+        function openModal(id) {
+            document.getElementById(id).classList.add('active');
+        }
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+        }
+        function toggleDropdown() {
+            document.getElementById('profileDropdown').classList.toggle('show');
+        }
+        function toggleMobileMenu() {
+            document.getElementById('navLinks').classList.toggle('active');
+        }
+        // Cerrar dropdown si se hace click fuera
+        window.onclick = function(event) {
+            if (!event.target.closest('.profile-trigger')) {
+                var dropdowns = document.getElementsByClassName("dropdown-content");
+                for (var i = 0; i < dropdowns.length; i++) {
+                    var openDropdown = dropdowns[i];
+                    if (openDropdown.classList.contains('show')) {
+                        openDropdown.classList.remove('show');
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>

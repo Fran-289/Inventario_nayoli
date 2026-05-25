@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card-header">
+    <h1><i class="ph ph-squares-four"></i> Dashboard Principal</h1>
+    <p style="color: #cbd5e1;">Resumen del sistema en tiempo real.</p>
+</div>
+
+<div class="dashboard-layout">
+    <div>
+        <div class="dashboard-stats" style="margin-bottom: 1.5rem;">
+            <div class="card stat-card" style="margin-bottom: 0;">
+                <h3><i class="ph ph-package"></i> Productos</h3>
+                <div class="value" style="color: var(--primary);">{{ total_products }}</div>
+            </div>
+            
+            <div class="card stat-card" style="margin-bottom: 0;">
+                <h3><i class="ph ph-warning-circle"></i> Stock Bajo</h3>
+                <div class="value" style="color: var(--danger);">{{ low_stock }}</div>
+            </div>
+        </div>
+
+        <div class="dashboard-stats">
+            <div class="card stat-card" style="margin-bottom: 0;">
+                <h3><i class="ph ph-arrows-left-right"></i> Movimientos</h3>
+                <div class="value" style="color: var(--secondary);">{{ total_movements }}</div>
+            </div>
+
+            <div class="card stat-card" style="margin-bottom: 0;">
+                <h3><i class="ph ph-users"></i> Clientes</h3>
+                <div class="value" style="color: var(--accent);">{{ total_clients }}</div>
+            </div>
+
+            <div class="card stat-card" style="margin-bottom: 0;">
+                <h3><i class="ph ph-truck"></i> Proveedores</h3>
+                <div class="value" style="color: var(--warning);">{{ total_providers }}</div>
+            </div>
+        </div>
+    </div>
+    
+    <div style="text-align: center;">
+        {% if session.get('dashboard_image', '').startswith('dash_') %}
+            <img src="{{ url_for('static', filename='uploads/' + session.dashboard_image) }}" alt="Dashboard Illustration" class="floating-img">
+        {% else %}
+            <img src="{{ url_for('static', filename='img/' + session.get('dashboard_image', 'sales_dashboard.png')) }}" alt="Dashboard Illustration" class="floating-img">
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

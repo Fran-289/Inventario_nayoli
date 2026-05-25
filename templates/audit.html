@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Registro de Auditoría</h2>
+    </div>
+    
+    <p style="color: #cbd5e1; margin-bottom: 1rem;">Historial inmutable de todas las acciones realizadas en el sistema.</p>
+
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Acción</th>
+                    <th>Módulo</th>
+                    <th>Descripción</th>
+                    <th>Usuario</th>
+                    <th>Fecha</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td>{{ log.id }}</td>
+                    <td><span class="stock-badge" style="background: rgba(255,255,255,0.1); color: var(--accent);">{{ log.action }}</span></td>
+                    <td>{{ log.module }}</td>
+                    <td>{{ log.description }}</td>
+                    <td>{{ log.username }}</td>
+                    <td>{{ log.date }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

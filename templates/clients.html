@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2><i class="ph ph-users"></i> Gestión de Clientes</h2>
+        <div>
+            <a href="{{ url_for('generate_pdf', module='clients') }}" class="btn btn-secondary"><i class="ph ph-download-simple"></i> Descargar PDF</a>
+            <button class="btn btn-primary" onclick="openModal('addModal')"><i class="ph ph-plus"></i> Nuevo Cliente</button>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Nombre</th>
+                    <th>Tipo de Cliente</th>
+                    <th>Teléfono</th>
+                    <th>Observación Adicional</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in clients %}
+                <tr>
+                    <td>{{ c.id }}</td>
+                    <td style="font-weight: 600;">{{ c.name }}</td>
+                    <td><span class="stock-badge stock-mid">{{ c.client_type or '-' }}</span></td>
+                    <td>{{ c.phone or '-' }}</td>
+                    <td>{{ c.observation or '-' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Add Modal -->
+<div class="modal" id="addModal">
+    <div class="modal-content">
+        <span class="close-modal" onclick="closeModal('addModal')">&times;</span>
+        <h2><i class="ph ph-user-plus"></i> Nuevo Cliente</h2>
+        <form method="POST" action="{{ url_for('add_client') }}">
+            <div class="form-group">
+                <label>Nombre del Cliente</label>
+                <input type="text" name="name" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label>Tipo de Cliente</label>
+                <select name="client_type" class="form-control">
+                    <option value="Mayorista">Mayorista</option>
+                    <option value="Minorista">Minorista</option>
+                    <option value="Eventual">Eventual</option>
+                    <option value="Vip">VIP</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Teléfono</label>
+                <input type="text" name="phone" class="form-control">
+            </div>
+            <div class="form-group">
+                <label>Observación Adicional</label>
+                <textarea name="observation" class="form-control" rows="3" placeholder="Detalles de ventas, preferencias, etc..."></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary"><i class="ph ph-floppy-disk"></i> Guardar Cliente</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2><i class="ph ph-arrows-left-right"></i> Movimientos (Entradas y Salidas)</h2>
+        <div>
+            <a href="{{ url_for('generate_pdf', module='movements') }}" class="btn btn-secondary"><i class="ph ph-download-simple"></i> Descargar PDF</a>
+            <button class="btn btn-primary" onclick="openModal('addModal')"><i class="ph ph-plus"></i> Registrar Movimiento</button>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Tipo</th>
+                    <th>Producto</th>
+                    <th>Cant.</th>
+                    <th>Cliente / Detalle</th>
+                    <th>Usuario</th>
+                    <th>Fecha</th>
+                    {% if session.role == 'admin' %}
+                    <th>Acciones</th>
+                    {% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in movements %}
+                <tr>
+                    <td>{{ m.id }}</td>
+                    <td>
+                        {% if m.type == 'in' %}
+                            <span class="stock-badge stock-high"><i class="ph ph-arrow-down-left"></i> Entrada</span>
+                        {% else %}
+                            <span class="stock-badge stock-low"><i class="ph ph-arrow-up-right"></i> Salida</span>
+                        {% endif %}
+                    </td>
+                    <td style="font-weight: 600;">{{ m.product_name }}</td>
+                    <td>{{ m.quantity }}</td>
+                    <td>
+                        {% if m.type == 'out' %}
+                            <div><i class="ph ph-user"></i> {{ m.client_name or 'Sin cliente' }}</div>
+                            {% if m.observation %}
+                                <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 4px;">Obs: {{ m.observation }}</div>
+                            {% endif %}
+                        {% else %}
+                            <span style="color: #64748b;">-</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ m.username }}</td>
+                    <td style="font-size: 0.85rem;">{{ m.date }}</td>
+                    {% if session.role == 'admin' %}
+                    <td>
+                        <form method="POST" action="{{ url_for('delete_movement', id=m.id) }}">
+                            <button class="btn btn-sm btn-danger" onclick="return confirm('¿Eliminar este movimiento? Se revertirá el stock.')"><i class="ph ph-trash"></i></button>
+                        </form>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Add Modal -->
+<div class="modal" id="addModal">
+    <div class="modal-content">
+        <span class="close-modal" onclick="closeModal('addModal')">&times;</span>
+        <h2><i class="ph ph-arrows-left-right"></i> Registrar Movimiento</h2>
+        <form method="POST" action="{{ url_for('add_movement') }}">
+            <div class="form-group">
+                <label>Tipo de Movimiento</label>
+                <select name="type" id="movementType" class="form-control" required onchange="toggleClientFields()">
+                    <option value="in">Entrada (Ingreso de Stock)</option>
+                    <option value="out">Salida (Venta/Merma)</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Producto</label>
+                <select name="product_id" class="form-control" required>
+                    {% for p in products %}
+                    <option value="{{ p.id }}">{{ p.name }} (Stock Actual: {{ p.stock }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Cantidad</label>
+                <input type="number" name="quantity" class="form-control" min="1" required>
+            </div>
+
+            <!-- Campos Condicionales para Salidas (Ventas) -->
+            <div id="outFields" style="display: none; background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+                <h4 style="margin-bottom: 1rem; color: var(--accent);"><i class="ph ph-receipt"></i> Detalles de la Venta</h4>
+                <div class="form-group">
+                    <label>Cliente</label>
+                    <select name="client_id" class="form-control">
+                        <option value="">Seleccionar Cliente (Opcional)</option>
+                        {% for c in clients %}
+                        <option value="{{ c.id }}">{{ c.name }} - {{ c.client_type }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Observación sobre la Venta / Cliente</label>
+                    <textarea name="observation" class="form-control" rows="2" placeholder="Ej: Se entregó en buen estado, pagó en efectivo..."></textarea>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width: 100%;"><i class="ph ph-check-circle"></i> Registrar</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    function toggleClientFields() {
+        const type = document.getElementById('movementType').value;
+        const outFields = document.getElementById('outFields');
+        if (type === 'out') {
+            outFields.style.display = 'block';
+        } else {
+            outFields.style.display = 'none';
+        }
+    }
+</script>
+{% endblock %}

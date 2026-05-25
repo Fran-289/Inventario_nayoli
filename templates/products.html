@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Inventario (Stock)</h2>
+        <div>
+            <a href="{{ url_for('generate_pdf', module='products') }}" class="btn btn-secondary">Descargar PDF</a>
+            {% if session.role == 'admin' %}
+            <button class="btn btn-primary" onclick="openModal('addModal')">Nuevo Producto</button>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Nombre</th>
+                    <th>Descripción</th>
+                    <th>Precio</th>
+                    <th>Stock</th>
+                    <th>Proveedor</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in products %}
+                <tr>
+                    <td>{{ p.id }}</td>
+                    <td>{{ p.name }}</td>
+                    <td>{{ p.description }}</td>
+                    <td>${{ p.price }}</td>
+                    <td>
+                        {% if p.stock < 10 %}
+                            <span class="stock-badge stock-low">{{ p.stock }}</span>
+                        {% elif p.stock < 50 %}
+                            <span class="stock-badge stock-mid">{{ p.stock }}</span>
+                        {% else %}
+                            <span class="stock-badge stock-high">{{ p.stock }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ p.provider_name or 'N/A' }}</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="openModal('editModal{{ p.id }}')">Editar</button>
+                        {% if session.role == 'admin' %}
+                        <form method="POST" action="{{ url_for('delete_product', id=p.id) }}" style="display:inline;">
+                            <button class="btn btn-sm btn-danger" onclick="return confirm('¿Seguro que deseas eliminar este producto?')">Eliminar</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+
+                <!-- Edit Modal -->
+                <div class="modal" id="editModal{{ p.id }}">
+                    <div class="modal-content">
+                        <span class="close-modal" onclick="closeModal('editModal{{ p.id }}')">&times;</span>
+                        <h2>Editar Producto</h2>
+                        <form method="POST" action="{{ url_for('edit_product', id=p.id) }}">
+                            <div class="form-group">
+                                <label>Nombre</label>
+                                <input type="text" name="name" class="form-control" value="{{ p.name }}" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Descripción</label>
+                                <input type="text" name="description" class="form-control" value="{{ p.description }}">
+                            </div>
+                            {% if session.role == 'admin' %}
+                            <div class="form-group">
+                                <label>Precio</label>
+                                <input type="number" step="0.01" name="price" class="form-control" value="{{ p.price }}">
+                            </div>
+                            <div class="form-group">
+                                <label>Proveedor</label>
+                                <select name="provider_id" class="form-control">
+                                    <option value="">Ninguno</option>
+                                    {% for prov in providers %}
+                                    <option value="{{ prov.id }}" {% if p.provider_id == prov.id %}selected{% endif %}>{{ prov.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            {% endif %}
+                            <button type="submit" class="btn btn-primary">Guardar</button>
+                        </form>
+                    </div>
+                </div>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Add Modal -->
+<div class="modal" id="addModal">
+    <div class="modal-content">
+        <span class="close-modal" onclick="closeModal('addModal')">&times;</span>
+        <h2>Nuevo Producto</h2>
+        <form method="POST" action="{{ url_for('add_product') }}">
+            <div class="form-group">
+                <label>Nombre</label>
+                <input type="text" name="name" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label>Descripción</label>
+                <input type="text" name="description" class="form-control">
+            </div>
+            <div class="form-group">
+                <label>Precio</label>
+                <input type="number" step="0.01" name="price" class="form-control" value="0">
+            </div>
+            <div class="form-group">
+                <label>Proveedor</label>
+                <select name="provider_id" class="form-control">
+                    <option value="">Ninguno</option>
+                    {% for prov in providers %}
+                    <option value="{{ prov.id }}">{{ prov.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">Guardar</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

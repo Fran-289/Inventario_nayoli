@@ -1,0 +1,6 @@
+Flask==3.0.0
+Werkzeug==3.0.0
+fpdf==1.7.2
+boto3==1.28.62
+PyMySQL==1.1.0
+gunicorn==21.2.0
