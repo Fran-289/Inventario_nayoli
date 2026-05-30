@@ -108,9 +108,17 @@ def init_db():
             price REAL DEFAULT 0,
             stock INTEGER DEFAULT 0,
             provider_id INTEGER,
+            image TEXT,
             FOREIGN KEY (provider_id) REFERENCES providers (id)
         )
     ''')
+    
+    # Migración rápida para base de datos existente
+    try:
+        conn.execute('ALTER TABLE products ADD COLUMN image TEXT')
+        conn.commit()
+    except Exception:
+        pass
 
     # Movimientos
     conn.execute('''

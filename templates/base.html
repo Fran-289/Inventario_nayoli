@@ -34,7 +34,7 @@
 
         <div class="nav-right">
             <div class="profile-menu">
-                <div class="profile-trigger" onclick="toggleDropdown()">
+                <div class="profile-trigger" onclick="openModal('profileModal')">
                     <div class="avatar-circle">
                         {% if session.get('avatar') %}
                             <img src="{{ url_for('static', filename='uploads/' + session.get('avatar')) }}" alt="Avatar">
@@ -47,14 +47,6 @@
                         <span class="profile-role">{% if session.get('role') == 'admin' %}Administrador{% else %}Vendedor{% endif %}</span>
                     </div>
                     <i class="ph ph-caret-down"></i>
-                </div>
-                
-                <div class="dropdown-content" id="profileDropdown">
-                    <a onclick="openModal('avatarModal')"><i class="ph ph-image"></i> Cambiar Foto</a>
-                    <a href="{{ url_for('toggle_theme') }}"><i class="ph ph-moon"></i> Cambiar a {% if session.get('theme') == 'dark' %}Modo Claro{% else %}Modo Oscuro{% endif %}</a>
-                    <a onclick="openModal('dashboardImageModal')"><i class="ph ph-desktop"></i> Cambiar Imagen Dashboard</a>
-                    <a onclick="openModal('infoModal')"><i class="ph ph-info"></i> Información del Sistema</a>
-                    <a href="{{ url_for('logout') }}" style="color: var(--danger);"><i class="ph ph-sign-out"></i> Cerrar Sesión</a>
                 </div>
             </div>
         </div>
@@ -106,6 +98,66 @@
         </div>
     </div>
 
+    <!-- Modal Perfil del Usuario -->
+    <div class="modal" id="profileModal">
+        <div class="modal-content" style="max-width: 420px; text-align: center; padding: 2rem;">
+            <span class="close-modal" onclick="closeModal('profileModal')">&times;</span>
+            <h2><i class="ph ph-user"></i> Mi Perfil</h2>
+            
+            <!-- Foto de Perfil Grande -->
+            <div style="margin: 1.5rem 0; display: flex; flex-direction: column; align-items: center;">
+                <div class="avatar-circle" style="width: 110px; height: 110px; font-size: 3rem; margin-bottom: 0.8rem; border: 3px solid var(--primary); box-shadow: 0 4px 12px rgba(0,0,0,0.3); cursor: pointer; transition: transform 0.2s;"
+                     onclick="closeModal('profileModal'); showImageInLightbox('{% if session.get('avatar') %}{{ url_for('static', filename='uploads/' + session.get('avatar')) }}{% else %}{% endif %}')"
+                     title="Haga clic para ver en grande">
+                    {% if session.get('avatar') %}
+                        <img src="{{ url_for('static', filename='uploads/' + session.get('avatar')) }}" alt="Avatar" style="width: 100%; height: 100%; object-fit: cover;">
+                    {% else %}
+                        {{ session.get('username', 'U')[:2].upper() }}
+                    {% endif %}
+                </div>
+                
+                {% if session.get('avatar') %}
+                <span style="font-size: 0.8rem; color: var(--accent); margin-bottom: 1rem; cursor: pointer;"
+                      onclick="closeModal('profileModal'); showImageInLightbox('{{ url_for('static', filename='uploads/' + session.get('avatar')) }}')">
+                    <i class="ph ph-magnifying-glass-plus"></i> Ver en grande
+                </span>
+                {% endif %}
+                
+                <h3 style="margin-bottom: 0.2rem; font-size: 1.4rem; color: var(--text-color);">{{ session.get('username', '')|capitalize }}</h3>
+                <p style="color: var(--accent); font-weight: 600; font-size: 0.9rem; margin-bottom: 1rem;">
+                    {% if session.get('role') == 'admin' %}Administrador{% else %}Vendedor{% endif %}
+                </p>
+            </div>
+            
+            <!-- Opciones y Ajustes -->
+            <div style="display: grid; grid-template-columns: 1fr; gap: 0.8rem; text-align: left; border-top: 1px solid var(--border); padding-top: 1.5rem;">
+                <button class="btn btn-primary" onclick="closeModal('profileModal'); openModal('avatarModal');" style="justify-content: center; width: 100%;">
+                    <i class="ph ph-image"></i> Cambiar Foto de Perfil
+                </button>
+                <a href="{{ url_for('toggle_theme') }}" class="btn btn-secondary" style="justify-content: center; width: 100%;">
+                    <i class="ph ph-moon"></i> Cambiar a {% if session.get('theme') == 'dark' %}Modo Claro{% else %}Modo Oscuro{% endif %}
+                </a>
+                <button class="btn btn-secondary" onclick="closeModal('profileModal'); openModal('dashboardImageModal');" style="justify-content: center; width: 100%;">
+                    <i class="ph ph-desktop"></i> Cambiar Fondo del Dashboard
+                </button>
+                <button class="btn btn-secondary" onclick="closeModal('profileModal'); openModal('infoModal');" style="justify-content: center; width: 100%;">
+                    <i class="ph ph-info"></i> Información del Sistema
+                </button>
+                <a href="{{ url_for('logout') }}" class="btn btn-danger" style="justify-content: center; width: 100%;">
+                    <i class="ph ph-sign-out"></i> Cerrar Sesión
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Visor de Imagen (Lightbox) -->
+    <div class="modal" id="lightboxModal" onclick="closeModal('lightboxModal')">
+        <div class="modal-content" style="max-width: 600px; padding: 0.5rem; background: transparent; border: none; box-shadow: none; display: flex; justify-content: center; align-items: center; position: relative;">
+            <span class="close-modal" onclick="closeModal('lightboxModal')" style="position: absolute; top: -10px; right: 10px; font-size: 2.5rem; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.8); z-index: 1001;">&times;</span>
+            <img id="lightboxImage" src="" alt="Vista grande" style="max-width: 100%; max-height: 80vh; object-fit: contain; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+        </div>
+    </div>
+
     <!-- Flashes -->
     <div class="flash-container">
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -129,22 +181,13 @@
         function closeModal(id) {
             document.getElementById(id).classList.remove('active');
         }
-        function toggleDropdown() {
-            document.getElementById('profileDropdown').classList.toggle('show');
-        }
         function toggleMobileMenu() {
             document.getElementById('navLinks').classList.toggle('active');
         }
-        // Cerrar dropdown si se hace click fuera
-        window.onclick = function(event) {
-            if (!event.target.closest('.profile-trigger')) {
-                var dropdowns = document.getElementsByClassName("dropdown-content");
-                for (var i = 0; i < dropdowns.length; i++) {
-                    var openDropdown = dropdowns[i];
-                    if (openDropdown.classList.contains('show')) {
-                        openDropdown.classList.remove('show');
-                    }
-                }
+        function showImageInLightbox(src) {
+            if (src) {
+                document.getElementById('lightboxImage').src = src;
+                openModal('lightboxModal');
             }
         }
     </script>

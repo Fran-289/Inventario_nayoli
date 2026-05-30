@@ -30,36 +30,38 @@ def utility_processor():
     def get_img_url(filename):
         if not filename:
             return ''
-        if S3_BUCKET and (filename.startswith('avatar_') or filename.startswith('dash_')):
+        if S3_BUCKET and (filename.startswith('avatar_') or filename.startswith('dash_') or filename.startswith('product_')):
             return f"https://{S3_BUCKET}.s3.{S3_REGION}.amazonaws.com/{filename}"
-        elif filename.startswith('avatar_') or filename.startswith('dash_'):
+        elif filename.startswith('avatar_') or filename.startswith('dash_') or filename.startswith('product_'):
             return url_for('static', filename='uploads/' + filename)
         else:
             return url_for('static', filename='img/' + filename)
     return dict(get_img_url=get_img_url)
 
-app = Flask(__name__)
-app.secret_key = 'nayoli_super_secret_key'
 
-UPLOAD_FOLDER = os.path.join(app.root_path, 'static', 'uploads')
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-# Inicializar DB y crear usuarios por defecto
+# Inicializar DB y crear/actualizar usuarios por defecto con contraseñas seguras
 with app.app_context():
     db.init_db()
     conn = db.get_db_connection()
     c = conn.cursor()
+    
+    # Administrador (Admin123%)
+    hashed_admin_pw = generate_password_hash('Admin123%')
     c.execute('SELECT * FROM users WHERE username = ?', ('admin',))
     if not c.fetchone():
-        hashed_pw = generate_password_hash('admin123')
-        c.execute('INSERT INTO users (username, password, role) VALUES (?, ?, ?)', ('admin', hashed_pw, 'admin'))
-        conn.commit()
+        c.execute('INSERT INTO users (username, password, role) VALUES (?, ?, ?)', ('admin', hashed_admin_pw, 'admin'))
+    else:
+        c.execute('UPDATE users SET password = ? WHERE username = ?', (hashed_admin_pw, 'admin'))
+    conn.commit()
     
+    # Vendedor (Vendedor123%)
+    hashed_seller_pw = generate_password_hash('Vendedor123%')
     c.execute('SELECT * FROM users WHERE username = ?', ('vendedor',))
     if not c.fetchone():
-        hashed_pw = generate_password_hash('vendedor123')
-        c.execute('INSERT INTO users (username, password, role) VALUES (?, ?, ?)', ('vendedor', hashed_pw, 'seller'))
-        conn.commit()
+        c.execute('INSERT INTO users (username, password, role) VALUES (?, ?, ?)', ('vendedor', hashed_seller_pw, 'seller'))
+    else:
+        c.execute('UPDATE users SET password = ? WHERE username = ?', (hashed_seller_pw, 'vendedor'))
+    conn.commit()
     conn.close()
 
 # --- Decoradores ---
@@ -230,9 +232,17 @@ def add_product():
     price = request.form['price']
     provider_id = request.form.get('provider_id') or None
     
+    image_filename = None
+    if 'image' in request.files:
+        file = request.files['image']
+        if file and file.filename != '':
+            import time
+            image_filename = secure_filename(f"product_{int(time.time())}_{file.filename}")
+            save_file_to_storage(file, image_filename)
+            
     conn = db.get_db_connection()
-    conn.execute('INSERT INTO products (name, description, price, provider_id) VALUES (?, ?, ?, ?)',
-                 (name, description, price, provider_id))
+    conn.execute('INSERT INTO products (name, description, price, provider_id, image) VALUES (?, ?, ?, ?, ?)',
+                 (name, description, price, provider_id, image_filename))
     conn.commit()
     conn.close()
     db.log_audit(session['user_id'], 'Crear', 'Inventario', f'Producto creado: {name}')
@@ -244,14 +254,30 @@ def add_product():
 def edit_product(id):
     name = request.form['name']
     description = request.form['description']
+    
+    image_filename = None
+    if 'image' in request.files:
+        file = request.files['image']
+        if file and file.filename != '':
+            import time
+            image_filename = secure_filename(f"product_{int(time.time())}_{file.filename}")
+            save_file_to_storage(file, image_filename)
+            
     conn = db.get_db_connection()
     if session['role'] == 'admin':
         price = request.form['price']
         provider_id = request.form.get('provider_id') or None
-        conn.execute('UPDATE products SET name = ?, description = ?, price = ?, provider_id = ? WHERE id = ?',
-                     (name, description, price, provider_id, id))
+        if image_filename:
+            conn.execute('UPDATE products SET name = ?, description = ?, price = ?, provider_id = ?, image = ? WHERE id = ?',
+                         (name, description, price, provider_id, image_filename, id))
+        else:
+            conn.execute('UPDATE products SET name = ?, description = ?, price = ?, provider_id = ? WHERE id = ?',
+                         (name, description, price, provider_id, id))
     else:
-        conn.execute('UPDATE products SET name = ?, description = ? WHERE id = ?', (name, description, id))
+        if image_filename:
+            conn.execute('UPDATE products SET name = ?, description = ?, image = ? WHERE id = ?', (name, description, image_filename, id))
+        else:
+            conn.execute('UPDATE products SET name = ?, description = ? WHERE id = ?', (name, description, id))
     conn.commit()
     conn.close()
     db.log_audit(session['user_id'], 'Editar', 'Inventario', f'Producto editado ID: {id}')

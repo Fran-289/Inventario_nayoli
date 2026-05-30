@@ -17,6 +17,11 @@ def migrate():
     except sqlite3.OperationalError:
         pass # Column already exists
 
+    try:
+        c.execute("ALTER TABLE products ADD COLUMN image TEXT")
+    except sqlite3.OperationalError:
+        pass # Column already exists
+
     conn.commit()
     conn.close()
     print("Migration done.")
