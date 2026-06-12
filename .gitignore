@@ -19,3 +19,4 @@ static/uploads/*
 # Archivos temporales del sistema
 .DS_Store
 Thumbs.db
+database.db

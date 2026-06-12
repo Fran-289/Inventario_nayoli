@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2><i class="ph ph-gear"></i> Configuración del Negocio</h2>
+        <p style="color: #cbd5e1;">Personaliza el sistema para tu propia marca comercial.</p>
+    </div>
+
+    <form method="POST" action="{{ url_for('settings') }}" enctype="multipart/form-data" class="modern-form" style="max-width: 600px; margin-top: 1rem;">
+        <div class="form-group">
+            <label>Nombre de la Empresa</label>
+            <input type="text" name="company_name" value="{{ settings.company_name if settings else 'Mi Empresa' }}" required>
+        </div>
+
+        <div class="form-group">
+            <label>Símbolo de Moneda (Ej: $, €, MXN)</label>
+            <input type="text" name="currency" value="{{ settings.currency if settings else '$' }}" required>
+        </div>
+
+        <div class="form-group">
+            <label>Mensaje al pie del Ticket / Factura</label>
+            <textarea name="ticket_message" rows="3">{{ settings.ticket_message if settings else '¡Gracias por su compra!' }}</textarea>
+        </div>
+
+        <div class="form-group">
+            <label>Logotipo del Sistema</label>
+            {% if settings and settings.logo %}
+            <div style="margin-bottom: 10px;">
+                <img src="{{ get_img_url(settings.logo) }}" alt="Logo Actual" style="height: 60px; border-radius: 8px;">
+            </div>
+            {% endif %}
+            <input type="file" name="logo" accept="image/*">
+            <small style="color: #94a3b8;">Deja en blanco si no quieres cambiar el logotipo actual.</small>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary"><i class="ph ph-floppy-disk"></i> Guardar Cambios</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

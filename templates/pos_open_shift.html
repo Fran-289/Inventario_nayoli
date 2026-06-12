@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div style="display: flex; justify-content: center; align-items: center; min-height: 60vh;">
+    <div class="card" style="max-width: 400px; width: 100%; text-align: center;">
+        <i class="ph ph-lock-key" style="font-size: 4rem; color: var(--warning); margin-bottom: 1rem;"></i>
+        <h2>Apertura de Caja</h2>
+        <p style="color: #cbd5e1; margin-bottom: 2rem;">Para acceder al Punto de Venta, necesitas abrir un turno de caja indicando el saldo inicial en efectivo.</p>
+        
+        <form method="POST" action="{{ url_for('open_shift') }}" class="modern-form">
+            <div class="form-group text-left" style="text-align: left;">
+                <label>Saldo Inicial en Efectivo ({{ global_settings.currency if global_settings else '$' }})</label>
+                <input type="number" step="0.01" name="opening_balance" value="0" required class="form-control" style="font-size: 1.5rem; text-align: center;">
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%; font-size: 1.2rem; padding: 1rem;"><i class="ph ph-check-circle"></i> Abrir Turno</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

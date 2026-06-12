@@ -7,6 +7,8 @@ from functools import wraps
 from fpdf import FPDF
 import tempfile
 import boto3
+import json
+from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = 'nayoli_super_secret_key'
@@ -30,19 +32,24 @@ def utility_processor():
     def get_img_url(filename):
         if not filename:
             return ''
-        if S3_BUCKET and (filename.startswith('avatar_') or filename.startswith('dash_')):
+        if S3_BUCKET and (filename.startswith('avatar_') or filename.startswith('dash_') or filename.startswith('logo_')):
             return f"https://{S3_BUCKET}.s3.{S3_REGION}.amazonaws.com/{filename}"
-        elif filename.startswith('avatar_') or filename.startswith('dash_'):
+        elif filename.startswith('avatar_') or filename.startswith('dash_') or filename.startswith('logo_'):
             return url_for('static', filename='uploads/' + filename)
         else:
             return url_for('static', filename='img/' + filename)
-    return dict(get_img_url=get_img_url)
+            
+    conn = db.get_db_connection()
+    try:
+        global_settings = conn.execute('SELECT * FROM settings ORDER BY id DESC LIMIT 1').fetchone()
+    except Exception:
+        global_settings = None
+    finally:
+        conn.close()
+        
+    return dict(get_img_url=get_img_url, global_settings=global_settings)
 
-app = Flask(__name__)
-app.secret_key = 'nayoli_super_secret_key'
 
-UPLOAD_FOLDER = os.path.join(app.root_path, 'static', 'uploads')
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Inicializar DB y crear usuarios por defecto
 with app.app_context():
@@ -198,18 +205,162 @@ def upload_dashboard_image():
         
     return redirect(url_for('dashboard'))
 
+@app.route('/settings', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def settings():
+    conn = db.get_db_connection()
+    if request.method == 'POST':
+        company_name = request.form['company_name']
+        currency = request.form['currency']
+        ticket_message = request.form['ticket_message']
+        
+        logo = None
+        if 'logo' in request.files and request.files['logo'].filename != '':
+            file = request.files['logo']
+            filename = secure_filename(f"logo_{file.filename}")
+            save_file_to_storage(file, filename)
+            logo = filename
+            
+        if logo:
+            conn.execute('UPDATE settings SET company_name = ?, currency = ?, ticket_message = ?, logo = ?',
+                         (company_name, currency, ticket_message, logo))
+        else:
+            conn.execute('UPDATE settings SET company_name = ?, currency = ?, ticket_message = ?',
+                         (company_name, currency, ticket_message))
+        conn.commit()
+        db.log_audit(session['user_id'], 'Editar', 'Configuración', 'Actualizó los ajustes del negocio')
+        flash('Configuración guardada exitosamente.', 'success')
+        return redirect(request.referrer or url_for('dashboard'))
+        
+    current_settings = conn.execute('SELECT * FROM settings ORDER BY id DESC LIMIT 1').fetchone()
+    conn.close()
+    return render_template('settings.html', settings=current_settings)
+
 @app.route('/dashboard')
 @login_required
 def dashboard():
     conn = db.get_db_connection()
-    total_products = conn.execute('SELECT COUNT(*) as count FROM products').fetchone()['count']
-    low_stock = conn.execute('SELECT COUNT(*) as count FROM products WHERE stock < 10').fetchone()['count']
-    total_movements = conn.execute('SELECT COUNT(*) as count FROM movements').fetchone()['count']
-    total_clients = conn.execute('SELECT COUNT(*) as count FROM clients').fetchone()['count']
-    total_providers = conn.execute('SELECT COUNT(*) as count FROM providers').fetchone()['count']
+    total_products = conn.execute('SELECT COUNT(*) as c FROM products').fetchone()['c']
+    low_stock = conn.execute('SELECT COUNT(*) as c FROM products WHERE stock < 10').fetchone()['c']
+    total_movements = conn.execute('SELECT COUNT(*) as c FROM movements').fetchone()['c']
+    total_clients = conn.execute('SELECT COUNT(*) as c FROM clients').fetchone()['c']
+    total_providers = conn.execute('SELECT COUNT(*) as c FROM providers').fetchone()['c']
+    
+    # Check shift
+    current_shift = conn.execute('SELECT * FROM cash_shifts WHERE user_id = ? AND status = "open"', (session['user_id'],)).fetchone()
+    
     conn.close()
-    return render_template('dashboard.html', total_products=total_products, low_stock=low_stock, 
-                           total_movements=total_movements, total_clients=total_clients, total_providers=total_providers)
+    return render_template('dashboard.html', 
+                           total_products=total_products, 
+                           low_stock=low_stock,
+                           total_movements=total_movements,
+                           total_clients=total_clients,
+                           total_providers=total_providers,
+                           current_shift=current_shift)
+
+@app.route('/api/dashboard/stats')
+@login_required
+def api_dashboard_stats():
+    conn = db.get_db_connection()
+    # Ventas de los ultimos 7 dias
+    sales = conn.execute('''
+        SELECT date(date) as d, SUM(total) as t 
+        FROM sales 
+        WHERE date(date) >= date('now', '-7 days')
+        GROUP BY date(date)
+        ORDER BY d ASC
+    ''').fetchall()
+    
+    # Top 5 productos mas vendidos
+    top_products = conn.execute('''
+        SELECT p.name, SUM(si.quantity) as q
+        FROM sale_items si
+        JOIN products p ON si.product_id = p.id
+        GROUP BY p.id
+        ORDER BY q DESC
+        LIMIT 5
+    ''').fetchall()
+    conn.close()
+    
+    return json.dumps({
+        'sales_dates': [s['d'] for s in sales],
+        'sales_totals': [s['t'] for s in sales],
+        'top_names': [p['name'] for p in top_products],
+        'top_qty': [p['q'] for p in top_products]
+    })
+
+@app.route('/reports')
+@login_required
+def reports():
+    return render_template('reports.html')
+
+@app.route('/api/reports/data')
+@login_required
+def api_reports_data():
+    period = request.args.get('period', 'day') # shift, day, month, year
+    conn = db.get_db_connection()
+    
+    if period == 'shift':
+        # ultimos 15 turnos
+        data = conn.execute('''
+            SELECT c.id as label, c.total_sales as total, c.opening_time, c.closing_time, u.username
+            FROM cash_shifts c
+            LEFT JOIN users u ON c.user_id = u.id
+            ORDER BY c.opening_time DESC LIMIT 15
+        ''').fetchall()
+        labels = [f"Turno #{d['label']}" for d in reversed(data)]
+        totals = [d['total'] for d in reversed(data)]
+        records = [{
+            'col1': f"Turno #{d['label']} ({d['username']})",
+            'col2': d['opening_time'],
+            'col3': d['closing_time'] if d['closing_time'] else 'En curso',
+            'total': d['total']
+        } for d in data]
+        
+    elif period == 'month':
+        # ultimos 12 meses
+        data = conn.execute('''
+            SELECT strftime('%Y-%m', date) as label, SUM(total) as total
+            FROM sales
+            GROUP BY label
+            ORDER BY label DESC LIMIT 12
+        ''').fetchall()
+        labels = [d['label'] for d in reversed(data)]
+        totals = [d['total'] for d in reversed(data)]
+        records = [{'col1': d['label'], 'col2': '-', 'col3': '-', 'total': d['total']} for d in data]
+        
+    elif period == 'year':
+        # ultimos 5 años
+        data = conn.execute('''
+            SELECT strftime('%Y', date) as label, SUM(total) as total
+            FROM sales
+            GROUP BY label
+            ORDER BY label DESC LIMIT 5
+        ''').fetchall()
+        labels = [d['label'] for d in reversed(data)]
+        totals = [d['total'] for d in reversed(data)]
+        records = [{'col1': d['label'], 'col2': '-', 'col3': '-', 'total': d['total']} for d in data]
+        
+    else: # day
+        # ultimos 30 dias
+        data = conn.execute('''
+            SELECT date(date) as label, SUM(total) as total
+            FROM sales
+            WHERE date(date) >= date('now', '-30 days')
+            GROUP BY label
+            ORDER BY label DESC
+        ''').fetchall()
+        labels = [d['label'] for d in reversed(data)]
+        totals = [d['total'] for d in reversed(data)]
+        records = [{'col1': d['label'], 'col2': '-', 'col3': '-', 'total': d['total']} for d in data]
+        
+    conn.close()
+    return json.dumps({
+        'labels': labels,
+        'totals': totals,
+        'records': records
+    })
 
 # --- Módulo Productos ---
 @app.route('/products')
@@ -225,14 +376,17 @@ def products():
 @login_required
 @admin_required
 def add_product():
+    barcode = request.form.get('barcode', '')
     name = request.form['name']
     description = request.form['description']
     price = request.form['price']
+    pack_price = float(request.form.get('pack_price') or 0)
+    units_per_pack = int(request.form.get('units_per_pack') or 0)
     provider_id = request.form.get('provider_id') or None
     
     conn = db.get_db_connection()
-    conn.execute('INSERT INTO products (name, description, price, provider_id) VALUES (?, ?, ?, ?)',
-                 (name, description, price, provider_id))
+    conn.execute('INSERT INTO products (barcode, name, description, price, pack_price, units_per_pack, provider_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                 (barcode, name, description, price, pack_price, units_per_pack, provider_id))
     conn.commit()
     conn.close()
     db.log_audit(session['user_id'], 'Crear', 'Inventario', f'Producto creado: {name}')
@@ -242,16 +396,19 @@ def add_product():
 @app.route('/products/edit/<int:id>', methods=['POST'])
 @login_required
 def edit_product(id):
+    barcode = request.form.get('barcode', '')
     name = request.form['name']
     description = request.form['description']
     conn = db.get_db_connection()
     if session['role'] == 'admin':
         price = request.form['price']
+        pack_price = float(request.form.get('pack_price') or 0)
+        units_per_pack = int(request.form.get('units_per_pack') or 0)
         provider_id = request.form.get('provider_id') or None
-        conn.execute('UPDATE products SET name = ?, description = ?, price = ?, provider_id = ? WHERE id = ?',
-                     (name, description, price, provider_id, id))
+        conn.execute('UPDATE products SET barcode = ?, name = ?, description = ?, price = ?, pack_price = ?, units_per_pack = ?, provider_id = ? WHERE id = ?',
+                     (barcode, name, description, price, pack_price, units_per_pack, provider_id, id))
     else:
-        conn.execute('UPDATE products SET name = ?, description = ? WHERE id = ?', (name, description, id))
+        conn.execute('UPDATE products SET barcode = ?, name = ?, description = ? WHERE id = ?', (barcode, name, description, id))
     conn.commit()
     conn.close()
     db.log_audit(session['user_id'], 'Editar', 'Inventario', f'Producto editado ID: {id}')
@@ -389,6 +546,213 @@ def add_client():
     db.log_audit(session['user_id'], 'Crear', 'Clientes', f'Cliente creado: {name}')
     flash('Cliente agregado exitosamente.', 'success')
     return redirect(url_for('clients'))
+
+# --- Punto de Venta (POS) y Caja ---
+@app.route('/pos')
+@login_required
+def pos():
+    conn = db.get_db_connection()
+    # Check if there is an open shift for this user
+    shift = conn.execute('SELECT * FROM cash_shifts WHERE user_id = ? AND status = "open"', (session['user_id'],)).fetchone()
+    
+    if not shift:
+        conn.close()
+        return render_template('pos_open_shift.html')
+        
+    clients = conn.execute('SELECT * FROM clients').fetchall()
+    conn.close()
+    return render_template('pos.html', shift=shift, clients=clients)
+
+@app.route('/pos/open_shift', methods=['POST'])
+@login_required
+def open_shift():
+    opening_balance = float(request.form.get('opening_balance', 0))
+    conn = db.get_db_connection()
+    conn.execute('INSERT INTO cash_shifts (user_id, opening_balance) VALUES (?, ?)', (session['user_id'], opening_balance))
+    conn.commit()
+    conn.close()
+    db.log_audit(session['user_id'], 'Abrir Caja', 'POS', f'Caja abierta con ${opening_balance}')
+    flash('Turno de caja abierto exitosamente.', 'success')
+    return redirect(url_for('pos'))
+
+@app.route('/pos/close_shift', methods=['POST'])
+@login_required
+def close_shift():
+    closing_balance = float(request.form.get('closing_balance', 0))
+    conn = db.get_db_connection()
+    shift = conn.execute('SELECT * FROM cash_shifts WHERE user_id = ? AND status = "open"', (session['user_id'],)).fetchone()
+    
+    if shift:
+        conn.execute('UPDATE cash_shifts SET closing_balance = ?, closing_time = CURRENT_TIMESTAMP, status = "closed" WHERE id = ?', 
+                     (closing_balance, shift['id']))
+        conn.commit()
+        db.log_audit(session['user_id'], 'Cerrar Caja', 'POS', f'Caja cerrada. Total Ventas: ${shift["total_sales"]}')
+        flash('Turno cerrado exitosamente.', 'success')
+        
+    conn.close()
+    return redirect(url_for('dashboard'))
+
+@app.route('/api/pos/search')
+@login_required
+def pos_search():
+    query = request.args.get('q', '')
+    conn = db.get_db_connection()
+    # Search by barcode or name
+    products = conn.execute('SELECT id, barcode, name, price, stock, pack_price, units_per_pack FROM products WHERE (barcode = ? OR name LIKE ?) AND stock > 0', 
+                            (query, f'%{query}%')).fetchall()
+    conn.close()
+    return json.dumps([dict(p) for p in products])
+
+@app.route('/pos/checkout', methods=['POST'])
+@login_required
+def checkout():
+    conn = db.get_db_connection()
+    shift = conn.execute('SELECT * FROM cash_shifts WHERE user_id = ? AND status = "open"', (session['user_id'],)).fetchone()
+    if not shift:
+        conn.close()
+        return redirect(url_for('pos'))
+        
+    client_id = request.form.get('client_id') or None
+    cash_received = float(request.form.get('cash_received', 0))
+    payment_method = request.form.get('payment_method', 'efectivo')
+    cart_data = json.loads(request.form.get('cart', '[]'))
+    
+    if not cart_data:
+        flash('El carrito está vacío.', 'danger')
+        conn.close()
+        return redirect(url_for('pos'))
+        
+    total = 0
+    for item in cart_data:
+        is_pack = item.get('is_pack', False)
+        units_per_pack = item.get('units_per_pack') or 0
+        pack_price = item.get('pack_price') or 0
+        if not is_pack and units_per_pack > 0 and pack_price > 0:
+            packs = item['qty'] // units_per_pack
+            remainder = item['qty'] % units_per_pack
+            total += (packs * pack_price) + (remainder * item['price'])
+        else:
+            total += item['price'] * item['qty']
+            
+    change_given = cash_received - total if cash_received >= total else 0
+    if payment_method == 'mixto':
+        change_given = 0 # No hay cambio en mixto, el efectivo se cobra exacto y el resto en tarjeta
+    
+    # Register Sale
+    c = conn.execute('INSERT INTO sales (user_id, client_id, shift_id, total, cash_received, change_given, payment_method) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                 (session['user_id'], client_id, shift['id'], total, cash_received, change_given, payment_method))
+    
+    sale_id = c.lastrowid or c.db_conn.execute('SELECT last_insert_rowid()').fetchone()[0] if not getattr(c, 'lastrowid', None) else c.lastrowid
+    if not sale_id: # fallback sqlite
+        sale_id = conn.execute('SELECT seq FROM sqlite_sequence WHERE name="sales"').fetchone()[0]
+
+    # Process items
+    for item in cart_data:
+        is_pack = item.get('is_pack', False)
+        units_per_pack = item.get('units_per_pack') or 0
+        pack_price = item.get('pack_price') or 0
+        
+        # Calculate subtotal with auto-wholesale logic
+        if not is_pack and units_per_pack > 0 and pack_price > 0:
+            packs = item['qty'] // units_per_pack
+            remainder = item['qty'] % units_per_pack
+            subtotal = (packs * pack_price) + (remainder * item['price'])
+        else:
+            subtotal = item['price'] * item['qty']
+            
+        real_qty = item['qty'] * units_per_pack if is_pack and units_per_pack > 0 else item['qty']
+        obs = f'Venta POS #{sale_id} (Fardo)' if is_pack else f'Venta POS #{sale_id}'
+        
+        # Guardamos el unit_price que pagaron en promedio o el original
+        conn.execute('INSERT INTO sale_items (sale_id, product_id, quantity, unit_price, subtotal) VALUES (?, ?, ?, ?, ?)',
+                     (sale_id, item['id'], item['qty'], item['price'], subtotal))
+        # Reduce Stock
+        conn.execute('UPDATE products SET stock = stock - ? WHERE id = ?', (real_qty, item['id']))
+        # Movement record
+        conn.execute('INSERT INTO movements (type, quantity, product_id, user_id, client_id, observation) VALUES (?, ?, ?, ?, ?, ?)',
+                     ('out', real_qty, item['id'], session['user_id'], client_id, obs))
+                     
+    # Update shift total
+    conn.execute('UPDATE cash_shifts SET total_sales = total_sales + ? WHERE id = ?', (total, shift['id']))
+    
+    conn.commit()
+    conn.close()
+    db.log_audit(session['user_id'], 'Vender', 'POS', f'Venta POS #{sale_id} por ${total}')
+    flash('Venta completada exitosamente.', 'success')
+    return redirect(url_for('pos_ticket', id=sale_id))
+
+@app.route('/pos/ticket/<int:id>')
+@login_required
+def pos_ticket(id):
+    conn = db.get_db_connection()
+    sale = conn.execute('SELECT s.*, u.username, c.name as client_name FROM sales s LEFT JOIN users u ON s.user_id = u.id LEFT JOIN clients c ON s.client_id = c.id WHERE s.id = ?', (id,)).fetchone()
+    items = conn.execute('SELECT si.*, p.name FROM sale_items si JOIN products p ON si.product_id = p.id WHERE si.sale_id = ?', (id,)).fetchall()
+    settings = conn.execute('SELECT * FROM settings ORDER BY id DESC LIMIT 1').fetchone()
+    conn.close()
+    return render_template('ticket.html', sale=sale, items=items, settings=settings)
+
+@app.route('/pos/ticket/<int:id>/pdf')
+@login_required
+def pos_ticket_pdf(id):
+    conn = db.get_db_connection()
+    sale = conn.execute('SELECT s.*, u.username, c.name as client_name FROM sales s LEFT JOIN users u ON s.user_id = u.id LEFT JOIN clients c ON s.client_id = c.id WHERE s.id = ?', (id,)).fetchone()
+    items = conn.execute('SELECT si.*, p.name FROM sale_items si JOIN products p ON si.product_id = p.id WHERE si.sale_id = ?', (id,)).fetchall()
+    settings = conn.execute('SELECT * FROM settings ORDER BY id DESC LIMIT 1').fetchone()
+    conn.close()
+    
+    if not sale:
+        flash('Ticket no encontrado.', 'danger')
+        return redirect(url_for('pos'))
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    
+    company_name = settings['company_name'] if settings and settings['company_name'] else 'Nayoli'
+    pdf.set_font("Arial", style="B", size=16)
+    pdf.cell(200, 10, txt=company_name, ln=1, align="C")
+    
+    pdf.set_font("Arial", size=10)
+    pdf.cell(200, 6, txt=f"Ticket de Venta #{sale['id']}", ln=1, align="C")
+    pdf.cell(200, 6, txt=f"Fecha: {sale['date']}", ln=1, align="C")
+    pdf.cell(200, 6, txt=f"Cajero: {sale['username']}", ln=1, align="C")
+    
+    pdf.ln(5)
+    pdf.set_font("Arial", style="B", size=10)
+    pdf.cell(30, 8, txt="Cant", border=1)
+    pdf.cell(120, 8, txt="Descripcion", border=1)
+    pdf.cell(40, 8, txt="Importe", border=1, ln=1, align="R")
+    
+    pdf.set_font("Arial", size=10)
+    for item in items:
+        # Avoid char mapping issues
+        name_str = item['name'].encode('latin-1', 'replace').decode('latin-1')
+        pdf.cell(30, 8, txt=str(item['quantity']), border=1)
+        pdf.cell(120, 8, txt=name_str, border=1)
+        pdf.cell(40, 8, txt=f"${item['subtotal']:.2f}", border=1, ln=1, align="R")
+        
+    pdf.ln(5)
+    pdf.set_font("Arial", style="B", size=12)
+    pdf.cell(150, 8, txt="Total a Pagar:", align="R")
+    pdf.cell(40, 8, txt=f"${sale['total']:.2f}", ln=1, align="R")
+    
+    pdf.set_font("Arial", size=10)
+    pdf.cell(150, 6, txt="Efectivo Recibido:", align="R")
+    pdf.cell(40, 6, txt=f"${sale['cash_received']:.2f}", ln=1, align="R")
+    pdf.cell(150, 6, txt="Cambio:", align="R")
+    pdf.cell(40, 6, txt=f"${sale['change_given']:.2f}", ln=1, align="R")
+    
+    pdf.ln(10)
+    msg = settings['ticket_message'] if settings and settings['ticket_message'] else 'Gracias por su compra!'
+    msg = msg.encode('latin-1', 'replace').decode('latin-1')
+    pdf.cell(200, 6, txt=msg, ln=1, align="C")
+    pdf.cell(200, 6, txt="*** Este documento no tiene validez fiscal ***", ln=1, align="C")
+    
+    temp_dir = tempfile.gettempdir()
+    pdf_path = os.path.join(temp_dir, f'ticket_{id}.pdf')
+    pdf.output(pdf_path)
+    
+    return send_file(pdf_path, as_attachment=True, download_name=f'Ticket_Venta_{id}.pdf')
 
 # --- Módulo Auditoría ---
 @app.route('/audit')

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div style="display: flex; justify-content: center; align-items: flex-start; padding-top: 2rem;">
+    <div class="card" id="ticketContent" style="background-color: #ffffff; color: #000000; max-width: 400px; width: 100%; border-radius: 0; padding: 2rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        
+        <div style="text-align: center; margin-bottom: 2rem;">
+            {% if settings and settings.logo %}
+                <img src="{{ get_img_url(settings.logo) }}" alt="Logo" style="height: 120px; max-width: 100%; object-fit: contain; filter: grayscale(100%); margin-bottom: 10px;">
+            {% endif %}
+            <h2 style="margin: 0; font-size: 1.5rem; color: #000;">{{ settings.company_name if settings else 'Nayoli' }}</h2>
+            <p style="margin: 0; font-size: 0.9rem; color: #333;">Ticket de Venta #{{ sale.id }}</p>
+            <p style="margin: 0; font-size: 0.8rem; color: #666;">Fecha: {{ sale.date }}</p>
+            <p style="margin: 0; font-size: 0.8rem; color: #666;">Cajero: {{ sale.username }}</p>
+            {% if sale.client_name %}
+            <p style="margin: 0; font-size: 0.8rem; color: #666;">Cliente: {{ sale.client_name }}</p>
+            {% endif %}
+        </div>
+
+        <div style="border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 1rem 0; margin-bottom: 1rem;">
+            <table style="width: 100%; min-width: unset; font-size: 0.9rem; color: #000; border: none; margin-top: 0;">
+                <thead>
+                    <tr style="text-align: left; background: transparent;">
+                        <th style="padding: 4px 0; border: none; color: #000; background: transparent;">Cant</th>
+                        <th style="padding: 4px 0; border: none; color: #000; background: transparent;">Descripción</th>
+                        <th style="text-align: right; padding: 4px 0; border: none; color: #000; background: transparent;">Importe</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr>
+                        <td style="padding: 4px 0; border: none;">{{ item.quantity }}</td>
+                        <td style="padding: 4px 0; border: none;">{{ item.name }}</td>
+                        <td style="text-align: right; padding: 4px 0; border: none;">${{ item.subtotal }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div style="text-align: right; font-size: 0.9rem;">
+            <p style="margin: 4px 0;"><strong>Total a Pagar:</strong> <span style="font-size: 1.2rem; font-weight: bold;">${{ sale.total }}</span></p>
+            <p style="margin: 4px 0;">Efectivo Recibido: ${{ sale.cash_received }}</p>
+            <p style="margin: 4px 0;">Cambio: ${{ sale.change_given }}</p>
+            <p style="margin: 4px 0; font-size: 0.8rem; color: #666;">Método: {{ sale.payment_method }}</p>
+        </div>
+
+        <div style="text-align: center; margin-top: 2rem; font-size: 0.8rem; color: #333;">
+            <p>{{ settings.ticket_message if settings else '¡Gracias por su compra!' }}</p>
+            <p>*** Este documento no tiene validez fiscal ***</p>
+        </div>
+    </div>
+</div>
+
+<div style="text-align: center; margin-top: 2rem;">
+    <button class="btn btn-primary" onclick="window.print()"><i class="ph ph-printer"></i> Imprimir Ticket</button>
+    <a href="{{ url_for('pos_ticket_pdf', id=sale.id) }}" class="btn" style="background-color: #6366f1; color: white;"><i class="ph ph-download-simple"></i> Descargar PDF</a>
+    <a href="{{ url_for('pos') }}" class="btn btn-secondary"><i class="ph ph-arrow-left"></i> Volver a Caja</a>
+</div>
+{% endblock %}

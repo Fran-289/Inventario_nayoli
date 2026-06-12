@@ -6,9 +6,7 @@
     <p style="color: #cbd5e1;">Resumen del sistema en tiempo real.</p>
 </div>
 
-<div class="dashboard-layout">
-    <div>
-        <div class="dashboard-stats" style="margin-bottom: 1.5rem;">
+<div class="dashboard-stats" style="margin-bottom: 1.5rem;">
             <div class="card stat-card" style="margin-bottom: 0;">
                 <h3><i class="ph ph-package"></i> Productos</h3>
                 <div class="value" style="color: var(--primary);">{{ total_products }}</div>
@@ -35,15 +33,77 @@
                 <h3><i class="ph ph-truck"></i> Proveedores</h3>
                 <div class="value" style="color: var(--warning);">{{ total_providers }}</div>
             </div>
+    </div>
+    <!-- Gráficos Analíticos -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+        <div class="card" style="margin: 0;">
+            <h3 style="text-align: center; margin-bottom: 1rem;"><i class="ph ph-trend-up"></i> Ventas (Últimos 7 días)</h3>
+            <canvas id="salesChart" height="200"></canvas>
+        </div>
+        <div class="card" style="margin: 0; max-height: 350px; overflow-y: auto;">
+            <h3 style="text-align: center; margin-bottom: 1rem;"><i class="ph ph-list-numbers"></i> Top Productos Vendidos</h3>
+            <div id="topProductsList" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                <!-- Listado inyectado por JS -->
+            </div>
         </div>
     </div>
-    
-    <div style="text-align: center;">
-        {% if session.get('dashboard_image', '').startswith('dash_') %}
-            <img src="{{ url_for('static', filename='uploads/' + session.dashboard_image) }}" alt="Dashboard Illustration" class="floating-img">
-        {% else %}
-            <img src="{{ url_for('static', filename='img/' + session.get('dashboard_image', 'sales_dashboard.png')) }}" alt="Dashboard Illustration" class="floating-img">
-        {% endif %}
+
+<!-- Módulo de Turno Rápido -->
+{% if current_shift %}
+<div class="card" style="margin-top: 1.5rem; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid var(--primary);">
+    <div>
+        <h3 style="margin:0;"><i class="ph ph-lock-open"></i> Turno Abierto</h3>
+        <p style="margin:0; color: #94a3b8;">Ventas del turno: {{ global_settings.currency if global_settings else '$' }}{{ current_shift.total_sales }}</p>
     </div>
+    <form method="POST" action="{{ url_for('close_shift') }}" onsubmit="return confirm('¿Seguro que deseas cerrar el turno?');">
+        <input type="hidden" name="closing_balance" value="{{ current_shift.total_sales + current_shift.opening_balance }}">
+        <button type="submit" class="btn btn-danger"><i class="ph ph-lock-key"></i> Cerrar Turno</button>
+    </form>
 </div>
+{% endif %}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    fetch('/api/dashboard/stats')
+        .then(response => response.json())
+        .then(data => {
+            // Chart 1: Ventas (Line)
+            const ctxSales = document.getElementById('salesChart').getContext('2d');
+            new Chart(ctxSales, {
+                type: 'line',
+                data: {
+                    labels: data.sales_dates.length ? data.sales_dates : ['Sin datos'],
+                    datasets: [{
+                        label: 'Ingresos',
+                        data: data.sales_totals.length ? data.sales_totals : [0],
+                        borderColor: '#6366f1',
+                        backgroundColor: 'rgba(99, 102, 241, 0.2)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: { responsive: true, plugins: { legend: { display: false } } }
+            });
+
+            // Chart 2: Top Productos (Listado)
+            const listContainer = document.getElementById('topProductsList');
+            if (data.top_names.length === 0) {
+                listContainer.innerHTML = '<div style="text-align: center; color: #94a3b8;">No hay ventas aún</div>';
+            } else {
+                let html = '';
+                for(let i=0; i<data.top_names.length; i++) {
+                    const name = data.top_names[i];
+                    const qty = data.top_qty[i];
+                    html += `
+                        <div style="display: flex; justify-content: space-between; padding: 0.5rem; background: rgba(255,255,255,0.05); border-radius: 6px;">
+                            <span style="font-weight: bold;">${i+1}. ${name}</span>
+                            <span style="color: var(--primary);">${qty} vendidos</span>
+                        </div>
+                    `;
+                }
+                listContainer.innerHTML = html;
+            }
+        });
+</script>
 {% endblock %}

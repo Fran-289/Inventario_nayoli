@@ -78,6 +78,28 @@ def init_db():
         )
     ''')
     
+    # Settings (Configuración Global del Negocio)
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_name TEXT NOT NULL,
+            logo TEXT,
+            currency TEXT DEFAULT '$',
+            ticket_message TEXT
+        )
+    ''')
+    
+    # Settings (Configuración Global del Negocio)
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_name TEXT NOT NULL,
+            logo TEXT,
+            currency TEXT DEFAULT '$',
+            ticket_message TEXT
+        )
+    ''')
+
     # Proveedores
     conn.execute('''
         CREATE TABLE IF NOT EXISTS providers (
@@ -105,8 +127,13 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             description TEXT,
-            price REAL DEFAULT 0,
-            stock INTEGER DEFAULT 0,
+            price REAL NOT NULL,
+            pack_price REAL DEFAULT 0,
+            units_per_pack INTEGER DEFAULT 0,
+            stock INTEGER NOT NULL,
+            category TEXT NOT NULL,
+            image TEXT,
+            barcode TEXT,
             provider_id INTEGER,
             FOREIGN KEY (provider_id) REFERENCES providers (id)
         )
@@ -129,6 +156,53 @@ def init_db():
         )
     ''')
 
+    # Turnos de Caja (Control de Efectivo)
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS cash_shifts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            opening_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            closing_time TIMESTAMP NULL,
+            opening_balance REAL DEFAULT 0,
+            closing_balance REAL NULL,
+            total_sales REAL DEFAULT 0,
+            status TEXT DEFAULT 'open',
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+    ''')
+
+    # Ventas (POS)
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS sales (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            client_id INTEGER NULL,
+            shift_id INTEGER,
+            total REAL DEFAULT 0,
+            cash_received REAL DEFAULT 0,
+            change_given REAL DEFAULT 0,
+            payment_method TEXT DEFAULT 'efectivo',
+            date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id),
+            FOREIGN KEY (client_id) REFERENCES clients (id),
+            FOREIGN KEY (shift_id) REFERENCES cash_shifts (id)
+        )
+    ''')
+
+    # Detalle de Ventas
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS sale_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sale_id INTEGER,
+            product_id INTEGER,
+            quantity INTEGER NOT NULL,
+            unit_price REAL NOT NULL,
+            subtotal REAL NOT NULL,
+            FOREIGN KEY (sale_id) REFERENCES sales (id),
+            FOREIGN KEY (product_id) REFERENCES products (id)
+        )
+    ''')
+
     # Auditoria
     conn.execute('''
         CREATE TABLE IF NOT EXISTS audit_logs (
@@ -142,6 +216,13 @@ def init_db():
         )
     ''')
 
+    conn.commit()
+
+    # Asegurar un registro en settings si está vacío
+    c = conn.execute('SELECT COUNT(*) as count FROM settings')
+    if c.fetchone()['count'] == 0:
+        conn.execute("INSERT INTO settings (company_name, logo, currency, ticket_message) VALUES ('Mi Empresa', 'sales_dashboard.png', '$', '¡Gracias por su compra!')")
+    
     conn.commit()
     conn.close()
 

@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <h2>📊 Reportes Analíticos</h2>
+</div>
+
+<div class="card">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <h3 style="margin: 0;">Rendimiento de Ventas</h3>
+        <select id="reportPeriod" class="form-control" style="width: auto; margin: 0;" onchange="loadReport()">
+            <option value="shift">Por Turno (Últimos 15)</option>
+            <option value="day" selected>Diario (Últimos 30 días)</option>
+            <option value="month">Mensual (Último Año)</option>
+            <option value="year">Anual (Últimos 5 Años)</option>
+        </select>
+    </div>
+    <div style="width: 100%; overflow-x: auto;">
+        <div style="min-width: 600px; height: 400px; padding: 1rem;">
+            <canvas id="reportsChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<div class="card" style="margin-top: 2rem;">
+    <div class="card-header">
+        <h3 style="margin: 0;"><i class="ph ph-list-dashes"></i> Detalle de Registros</h3>
+    </div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th id="thCol1">Periodo</th>
+                    <th id="thCol2">Apertura</th>
+                    <th id="thCol3">Cierre</th>
+                    <th>Total Vendido</th>
+                </tr>
+            </thead>
+            <tbody id="recordsTableBody">
+                <!-- Llenado por JS -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    let reportsChart = null;
+
+    function loadReport() {
+        const period = document.getElementById('reportPeriod').value;
+        
+        fetch(`/api/reports/data?period=${period}`)
+            .then(r => r.json())
+            .then(data => {
+                const ctx = document.getElementById('reportsChart').getContext('2d');
+                
+                if (reportsChart) {
+                    reportsChart.destroy();
+                }
+                
+                let type = 'bar';
+                if(period === 'day' || period === 'month') type = 'line';
+                
+                reportsChart = new Chart(ctx, {
+                    type: type,
+                    data: {
+                        labels: data.labels,
+                        datasets: [{
+                            label: 'Total de Ventas ($)',
+                            data: data.totals,
+                            backgroundColor: 'rgba(99, 102, 241, 0.5)',
+                            borderColor: 'rgba(99, 102, 241, 1)',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                labels: { color: '#f8fafc' }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: { color: '#94a3b8' },
+                                grid: { color: 'rgba(255,255,255,0.05)' }
+                            },
+                            x: {
+                                ticks: { color: '#94a3b8' },
+                                grid: { color: 'rgba(255,255,255,0.05)' }
+                            }
+                        }
+                    }
+                });
+                
+                // Actualizar Tabla de Registros
+                const tbody = document.getElementById('recordsTableBody');
+                const thCol1 = document.getElementById('thCol1');
+                const thCol2 = document.getElementById('thCol2');
+                const thCol3 = document.getElementById('thCol3');
+                
+                if (period === 'shift') {
+                    thCol1.textContent = 'Turno (Usuario)';
+                    thCol2.textContent = 'Apertura';
+                    thCol3.textContent = 'Cierre';
+                } else {
+                    thCol1.textContent = 'Fecha / Periodo';
+                    thCol2.textContent = '-';
+                    thCol3.textContent = '-';
+                }
+                
+                let html = '';
+                if (data.records && data.records.length > 0) {
+                    data.records.forEach(r => {
+                        html += `
+                        <tr>
+                            <td style="font-weight: bold;">${r.col1}</td>
+                            <td>${r.col2}</td>
+                            <td>${r.col3}</td>
+                            <td style="color: var(--primary); font-weight: bold;">$${parseFloat(r.total).toFixed(2)}</td>
+                        </tr>
+                        `;
+                    });
+                } else {
+                    html = '<tr><td colspan="4" style="text-align: center;">No hay registros</td></tr>';
+                }
+                tbody.innerHTML = html;
+            });
+    }
+
+    // Load initial data
+    loadReport();
+</script>
+{% endblock %}
